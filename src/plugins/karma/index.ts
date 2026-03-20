@@ -40,7 +40,7 @@ const karmaPlugin: InProcessAdapter = {
             opt.setName('user').setDescription('Who to give karma to').setRequired(true)
           )
           .addIntegerOption((opt) =>
-            opt.setName('amount').setDescription('Amount (default 1)').setMinValue(1)
+            opt.setName('amount').setDescription('Amount (default 1)').setMinValue(1).setMaxValue(5)
           )
       )
       .addSubcommand((sub) =>
@@ -51,7 +51,7 @@ const karmaPlugin: InProcessAdapter = {
             opt.setName('user').setDescription('Who to take karma from').setRequired(true)
           )
           .addIntegerOption((opt) =>
-            opt.setName('amount').setDescription('Amount (default 1)').setMinValue(1)
+            opt.setName('amount').setDescription('Amount (default 1)').setMinValue(1).setMaxValue(5)
           )
       )
       .addSubcommand((sub) =>
