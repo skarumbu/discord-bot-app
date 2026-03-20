@@ -22,12 +22,12 @@ const weatherPlugin: InProcessAdapter = {
     try {
       const response = await fetch(`https://wttr.in/${encodeURIComponent(zipcode)}?format=3`);
       if (!response.ok) {
-        return { content: "Couldn't fetch weather. Try again." };
+        return { content: "Couldn't fetch weather. Try again.", ephemeral: true };
       }
       const weather = await response.text();
-      return { content: weather.trim() };
+      return { content: weather.trim(), ephemeral: true };
     } catch {
-      return { content: "Couldn't fetch weather. Try again." };
+      return { content: "Couldn't fetch weather. Try again.", ephemeral: true };
     }
   },
 };
