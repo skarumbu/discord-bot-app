@@ -9,12 +9,19 @@ A TypeScript Discord bot that acts as a transport layer for a private friend-gro
 ## Commands
 
 ```bash
-npm run build      # Compile TypeScript → dist/
-npm run dev        # Run bot locally (tsx, no compile step)
-npm run lint       # Run ESLint
-npm run format     # Auto-format with Prettier
-npm run test       # Run unit tests (Vitest)
-npm run test:watch # Run Vitest in watch mode
+npm run build          # Compile TypeScript → dist/
+npm run dev            # Run bot locally (tsx, no compile step)
+npm run lint           # Run ESLint (src/ only)
+npm run format         # Auto-format with Prettier (src/ only)
+npm run test           # Run unit tests (Vitest)
+npm run test:watch     # Run Vitest in watch mode
+npm run docker:dev     # Build image and run with .env.dev
+npm run docker:prod    # Build image and run with .env.prod
+```
+
+Run a single test file:
+```bash
+npx vitest run tests/core/router.test.ts
 ```
 
 ## Architecture
@@ -103,7 +110,7 @@ Infrastructure lives in the separate [`discord-bot-infra`](https://github.com/sk
 - **Dynamic imports:** Must use `pathToFileURL(path).href` — raw filesystem paths throw in ESM (`"type": "module"`).
 - **Registry extension detection:** The registry infers whether to import `index.ts` or `index.js` from its own file's extension at runtime (`.ts` in dev via `tsx`, `.js` in prod from compiled output). Plugin entry files must match.
 - **Ephemeral replies:** In discord.js reply calls (bot core), use `flags: MessageFlags.Ephemeral` — `ephemeral: true` is deprecated in discord.js v14. Plugins still correctly return `ephemeral: true` in `PluginResponse`; the core translates it.
-- **Tests:** Live in `tests/core/` (`router.test.ts`, `registry.test.ts`) and `tests/plugins/weather/`. Excluded from `tsc`, run by Vitest. Mock `fetch` with `vi.stubGlobal('fetch', ...)`.
+- **Tests:** Live in `tests/core/` (`router.test.ts`, `registry.test.ts`) and `tests/plugins/weather/`. Excluded from `tsc`, run by Vitest. Mock `fetch` with `vi.stubGlobal('fetch', ...)`. Vitest is configured with `globals: false` — always import `describe`, `it`, `expect`, `vi`, etc. explicitly from `'vitest'`.
 - **Plugin export:** Plugins must use `export default pluginInstance`. The registry checks `mod.default ?? mod`, but default export is the convention.
 - **Registry crash:** If no plugins load successfully the registry throws and the bot exits. A malformed plugin logs a warning and is skipped; an empty `src/plugins/` crashes on startup.
-- **Weather tests:** 3 tests in `tests/plugins/weather/` currently fail (`result.ephemeral` is `undefined`). Pre-existing issue, unrelated to Docker.
+- **Weather tests:** The 3 ephemeral-assertion tests in `tests/plugins/weather/` currently fail (`result.ephemeral` is `undefined`). Pre-existing issue, unrelated to Docker.
