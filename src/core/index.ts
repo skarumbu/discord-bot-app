@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { Client, GatewayIntentBits, REST, Routes, MessageFlags } from 'discord.js';
+import { Client, GatewayIntentBits, REST, Routes, MessageFlags, ApplicationCommandOptionType } from 'discord.js';
 import { CommandRouter } from './router.js';
 import { discoverAndRegister } from './registry.js';
 import type { CommandContext } from '../types/index.js';
@@ -42,9 +42,18 @@ client.on('interactionCreate', async (interaction) => {
     return;
   }
 
-  const args = Object.fromEntries(
-    interaction.options.data.map((opt) => [opt.name, String(opt.value)])
-  );
+  const firstOpt = interaction.options.data[0];
+  let args: Record<string, string>;
+  if (firstOpt?.type === ApplicationCommandOptionType.Subcommand) {
+    args = { subcommand: firstOpt.name };
+    for (const opt of firstOpt.options ?? []) {
+      args[opt.name] = String(opt.value ?? '');
+    }
+  } else {
+    args = Object.fromEntries(
+      interaction.options.data.map((opt) => [opt.name, String(opt.value ?? '')])
+    );
+  }
 
   const ctx: CommandContext = {
     command: interaction.commandName,
