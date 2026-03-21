@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-A TypeScript Discord bot that acts as a transport layer for a private friend-group server. All features are implemented as self-contained plugins — the bot core only handles Discord API communication and routes commands to plugins. Current built-in plugin: `weather`. Next planned: `karma`.
+A TypeScript Discord bot that acts as a transport layer for a private friend-group server. All features are implemented as self-contained plugins — the bot core only handles Discord API communication and routes commands to plugins. Current built-in plugins: `weather`, `karma`.
 
 ## Commands
 
@@ -65,9 +65,10 @@ Built-in plugins live in `src/plugins/` and are auto-discovered. External plugin
 
 ## Data
 
-Each plugin owns its own persistence. The bot core and built-in plugins will use SQLite via Prisma. There is no shared datastore between plugins.
+Each plugin owns its own persistence. There is no shared datastore between plugins.
 
-> **Note:** Prisma is not yet installed or scaffolded. It will be added as a dependency when the `karma` plugin is implemented.
+- **`karma`:** Uses Azure Table Storage (`@azure/data-tables`). Requires `KARMA_STORAGE_CONNECTION_STRING` env var. The table (`karma`) is auto-created on startup.
+- **Future plugins:** SQLite via Prisma is the planned default for built-in plugins.
 
 ## Documentation Standards
 
@@ -98,7 +99,7 @@ Infrastructure lives in the separate [`discord-bot-infra`](https://github.com/sk
   docker run --env-file .env.prod discordbot:latest  # prod bot
   ```
 
-**Environment:** Copy `.env.dev.example` → `.env.dev` (dev bot) and `.env.prod.example` → `.env.prod` (prod bot). Fill in `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID` for each.
+**Environment:** Copy `.env.dev.example` → `.env.dev` (dev bot) and `.env.prod.example` → `.env.prod` (prod bot). Fill in `DISCORD_TOKEN`, `DISCORD_CLIENT_ID`, `DISCORD_GUILD_ID` for each. Also add `KARMA_STORAGE_CONNECTION_STRING` (Azure Storage connection string) — the karma plugin crashes at startup without it.
 
 **Node version:** Managed via [mise](https://mise.jdx.dev). Run `mise install` once after cloning.
 
@@ -114,3 +115,6 @@ Infrastructure lives in the separate [`discord-bot-infra`](https://github.com/sk
 - **Plugin export:** Plugins must use `export default pluginInstance`. The registry checks `mod.default ?? mod`, but default export is the convention.
 - **Registry crash:** If no plugins load successfully the registry throws and the bot exits. A malformed plugin logs a warning and is skipped; an empty `src/plugins/` crashes on startup.
 - **Weather tests:** The 3 ephemeral-assertion tests in `tests/plugins/weather/` currently fail (`result.ephemeral` is `undefined`). Pre-existing issue, unrelated to Docker.
+- **Karma cooldown is in-memory:** The 60s per-user give/take cooldown resets on bot restart. This is by design but means a restart bypasses active cooldowns.
+- **Karma self-give:** The plugin rejects give/take targeting the invoking user at the application level (not a Discord constraint).
+- **`KARMA_STORAGE_CONNECTION_STRING` required at import time:** The karma plugin calls `TableClient.fromConnectionString` at module load — missing this var crashes the entire bot on startup, not just the karma command.
