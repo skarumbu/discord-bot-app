@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { CommandContext } from '../../../src/types/index.js';
 
 const mockGetEntity = vi.fn();
@@ -32,14 +32,23 @@ const makeCtx = (
   },
 });
 
+// Advances by 2 minutes per test so cooldowns from previous tests are always expired.
+let testBaseTime = Date.now();
+
 describe('karma plugin', () => {
   beforeEach(() => {
+    testBaseTime += 2 * 60_000;
+    vi.useFakeTimers({ toFake: ['Date'], now: testBaseTime });
     vi.clearAllMocks();
     mockGetEntity.mockRejectedValue(Object.assign(new Error('not found'), { statusCode: 404 }));
     mockUpsertEntity.mockResolvedValue(undefined);
 
     async function* emptyAsyncGen() {}
     mockListEntities.mockReturnValue(emptyAsyncGen());
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('give increases target karma by specified amount', async () => {
@@ -156,5 +165,82 @@ describe('karma plugin', () => {
     const result = await plugin.execute(makeCtx('board'));
 
     expect(result.content).toBe('No karma recorded yet.');
+  });
+
+  describe('cooldown', () => {
+    it('give on cooldown returns ephemeral error with remaining seconds', async () => {
+      mockGetEntity.mockResolvedValue({ partitionKey: 'guild1', rowKey: 'user2', score: 0 });
+
+      const { default: plugin } = await import('../../../src/plugins/karma/index.js');
+      await plugin.execute(makeCtx('give', { user: 'user2' }));
+
+      const result = await plugin.execute(makeCtx('give', { user: 'user2' }));
+
+      expect(result.ephemeral).toBe(true);
+      expect(result.content).toContain('cooldown');
+      expect(result.content).toMatch(/\d+s/);
+    });
+
+    it('take on cooldown returns ephemeral error', async () => {
+      mockGetEntity.mockResolvedValue({ partitionKey: 'guild1', rowKey: 'user2', score: 10 });
+
+      const { default: plugin } = await import('../../../src/plugins/karma/index.js');
+      await plugin.execute(makeCtx('take', { user: 'user2' }));
+
+      const result = await plugin.execute(makeCtx('take', { user: 'user2' }));
+
+      expect(result.ephemeral).toBe(true);
+      expect(result.content).toContain('cooldown');
+    });
+
+    it('cooldown does not apply to show', async () => {
+      mockGetEntity.mockResolvedValue({ partitionKey: 'guild1', rowKey: 'user2', score: 5 });
+
+      const { default: plugin } = await import('../../../src/plugins/karma/index.js');
+      await plugin.execute(makeCtx('give', { user: 'user2' }));
+
+      const result = await plugin.execute(makeCtx('show', { user: 'user2' }));
+
+      expect(result.content).toContain('**5**');
+      expect(result.ephemeral).not.toBe(true);
+    });
+
+    it('cooldown does not apply to board', async () => {
+      mockGetEntity.mockResolvedValue({ partitionKey: 'guild1', rowKey: 'user2', score: 5 });
+
+      const { default: plugin } = await import('../../../src/plugins/karma/index.js');
+      await plugin.execute(makeCtx('give', { user: 'user2' }));
+
+      const result = await plugin.execute(makeCtx('board'));
+
+      expect(result.content).not.toContain('cooldown');
+      expect(result.ephemeral).not.toBe(true);
+    });
+
+    it('cooldown expires after COOLDOWN_MS — second give succeeds', async () => {
+      mockGetEntity.mockResolvedValue({ partitionKey: 'guild1', rowKey: 'user2', score: 0 });
+
+      const { default: plugin } = await import('../../../src/plugins/karma/index.js');
+      await plugin.execute(makeCtx('give', { user: 'user2' }));
+
+      vi.setSystemTime(testBaseTime + 60_001);
+
+      const result = await plugin.execute(makeCtx('give', { user: 'user2' }));
+
+      expect(result.content).toContain('gave');
+      expect(result.ephemeral).not.toBe(true);
+    });
+
+    it('different users are not affected by each other\'s cooldowns', async () => {
+      mockGetEntity.mockResolvedValue({ partitionKey: 'guild1', rowKey: 'user2', score: 0 });
+
+      const { default: plugin } = await import('../../../src/plugins/karma/index.js');
+      await plugin.execute(makeCtx('give', { user: 'user2' }, 'user1'));
+
+      const result = await plugin.execute(makeCtx('give', { user: 'user2' }, 'user3'));
+
+      expect(result.content).toContain('gave');
+      expect(result.ephemeral).not.toBe(true);
+    });
   });
 });

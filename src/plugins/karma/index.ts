@@ -12,6 +12,16 @@ const connectionString = process.env.KARMA_STORAGE_CONNECTION_STRING!;
 const client = TableClient.fromConnectionString(connectionString, 'karma');
 await client.createTable(); // no-op if already exists
 
+const COOLDOWN_MS = 60_000; // 60 seconds
+const cooldowns = new Map<string, number>(); // key: `${guildId}:${userId}`, value: expiry timestamp
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, expiry] of cooldowns) {
+    if (expiry <= now) cooldowns.delete(key);
+  }
+}, 5 * 60_000); // prune every 5 minutes
+
 async function getScore(guildId: string, userId: string): Promise<number> {
   try {
     const entity = await client.getEntity<KarmaEntity>(guildId, userId);
@@ -76,6 +86,13 @@ const karmaPlugin: InProcessAdapter = {
       const targetId = ctx.args['user'];
       const amount = parseInt(ctx.args['amount'] ?? '1', 10);
 
+      const cooldownKey = `${guildId}:${invokingUserId}`;
+      const expiry = cooldowns.get(cooldownKey);
+      if (expiry && Date.now() < expiry) {
+        const remaining = Math.ceil((expiry - Date.now()) / 1000);
+        return { content: `You're on cooldown. Try again in **${remaining}s**.`, ephemeral: true };
+      }
+
       if (targetId === invokingUserId) {
         return { content: "You can't give karma to yourself.", ephemeral: true };
       }
@@ -84,6 +101,7 @@ const karmaPlugin: InProcessAdapter = {
       const delta = subcommand === 'give' ? amount : -amount;
       const next = current + delta;
       await setScore(guildId, targetId, next);
+      cooldowns.set(cooldownKey, Date.now() + COOLDOWN_MS);
 
       const verb = subcommand === 'give' ? 'gave' : 'took';
       const prep = subcommand === 'give' ? 'to' : 'from';
