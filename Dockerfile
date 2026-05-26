@@ -1,12 +1,14 @@
 # Stage 1: production dependencies only
 FROM node:22-alpine AS deps
 WORKDIR /app
+RUN apk add --no-cache git
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 # Stage 2: full build (includes devDependencies + TypeScript compilation)
 FROM node:22-alpine AS build
 WORKDIR /app
+RUN apk add --no-cache git
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json ./
