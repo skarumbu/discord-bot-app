@@ -3,6 +3,9 @@ import { Client, GatewayIntentBits, REST, Routes, MessageFlags, ApplicationComma
 import { CommandRouter } from './router.js';
 import { discoverAndRegister } from './registry.js';
 import type { CommandContext } from '../types/index.js';
+import { getLogger } from '@sriram/logger';
+
+const logger = getLogger('discord-bot');
 
 const { DISCORD_TOKEN, DISCORD_CLIENT_ID, DISCORD_GUILD_ID } = process.env;
 
@@ -22,16 +25,32 @@ const definitions = router.getSlashCommandDefinitions();
 await rest
   .put(Routes.applicationGuildCommands(DISCORD_CLIENT_ID, DISCORD_GUILD_ID), { body: definitions })
   .catch((err) => {
-    console.error('[bot] failed to register slash commands:', err);
+    logger.error({
+      endpoint: '/startup/commands',
+      method: 'DISCORD',
+      status: 500,
+      message: (err as Error).message ?? String(err),
+      error_type: (err as Error).constructor?.name ?? 'Error',
+      stack_trace: (err as Error).stack?.slice(0, 2000),
+      duration_ms: 0,
+    });
     process.exit(1);
   });
-console.log(`[bot] registered ${definitions.length} slash command(s)`);
+logger.request({ endpoint: '/startup/commands', method: 'DISCORD', status: 200, duration_ms: 0 });
 
 // Boot Discord client
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
 client.on('error', (err) => {
-  console.error('[bot] client error:', err);
+  logger.error({
+    endpoint: '/client',
+    method: 'DISCORD',
+    status: 500,
+    message: err.message,
+    error_type: err.constructor?.name ?? 'Error',
+    stack_trace: err.stack?.slice(0, 2000),
+    duration_ms: 0,
+  });
 });
 
 client.on('interactionCreate', async (interaction) => {
@@ -74,7 +93,16 @@ client.on('interactionCreate', async (interaction) => {
       flags: response.ephemeral ? MessageFlags.Ephemeral : undefined,
     });
   } catch (err) {
-    console.error('[bot] interaction handler error:', err);
+    const error = err as Error;
+    logger.error({
+      endpoint: `/command/${interaction.commandName}`,
+      method: 'DISCORD',
+      status: 500,
+      message: error.message ?? String(err),
+      error_type: error.constructor?.name ?? 'Error',
+      stack_trace: error.stack?.slice(0, 2000),
+      duration_ms: 0,
+    });
     const replyFn = interaction.replied || interaction.deferred
       ? interaction.followUp.bind(interaction)
       : interaction.reply.bind(interaction);
@@ -82,8 +110,8 @@ client.on('interactionCreate', async (interaction) => {
   }
 });
 
-client.once('clientReady', (c) => {
-  console.log(`[bot] ready as ${c.user.tag}`);
+client.once('clientReady', (_c) => {
+  logger.request({ endpoint: '/startup/ready', method: 'DISCORD', status: 200, duration_ms: 0 });
 });
 
 await client.login(DISCORD_TOKEN);
